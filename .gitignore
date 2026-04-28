@@ -1,0 +1,33 @@
+# Generated output — never commit real PoC files with live session tokens
+csrf_poc.html
+*.poc.html
+
+# Raw HTTP requests often contain live session cookies — keep them local
+*.txt
+!sample_request.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

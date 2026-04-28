@@ -1,0 +1,7 @@
+POST /my-account/change-email HTTP/2
+Host: TARGET.web-security-academy.net
+Cookie: session=REPLACE_WITH_YOUR_SESSION
+Content-Length: 40
+Content-Type: application/x-www-form-urlencoded
+
+email=attacker%40evil.com&csrf=REPLACE_TOKEN
