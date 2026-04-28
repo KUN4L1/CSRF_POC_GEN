@@ -5,15 +5,97 @@ A CLI tool that generates CSRF Proof-of-Concept HTML pages from raw HTTP request
 ## Features
 
 - Supports both `GET` and `POST` requests
-- Automatically detects `HTTP/2` and uses `https://` scheme
-- Extracts GET query params and POST body params as `<input type="hidden">` fields (no params leaked into the URL)
+- **Three input modes** — file, pipe, or interactive paste
+- Automatically detects `HTTP/2` → `https://` scheme
 - HTML decimal entity-encodes all values (`@` → `&#64;`, `.` → `&#46;`) exactly like Burp
 - Adds `history.pushState` to strip the `Referer` header on submit
+- Custom output path with `-o` flag
+- `--stdout` mode to pipe output to other tools
 - Zero dependencies — pure Python 3 standard library
+
+## Installation
+
+### Option A — Run directly (no install)
+```bash
+git clone https://github.com/YOUR_USERNAME/csrf-poc-gen.git
+cd csrf-poc-gen
+python3 csrf_poc_gen.py request.txt
+```
+
+### Option B — Install as a system command (`csrf-poc-gen`)
+```bash
+git clone https://github.com/YOUR_USERNAME/csrf-poc-gen.git
+cd csrf-poc-gen
+pip install . --break-system-packages
+```
+
+After install, the `csrf-poc-gen` command is available globally from anywhere in your terminal.
+
+## Usage
+
+```
+usage: csrf-poc-gen [-h] [-o FILE] [--stdout] [--no-banner] REQUEST
+
+positional arguments:
+  REQUEST               Path to a raw HTTP request file, or '-' to read from stdin
+
+options:
+  -h, --help            show this help message and exit
+  -o FILE, --output FILE
+                        Output file path (default: csrf_poc.html)
+  --stdout              Print PoC to stdout instead of saving to a file
+  --no-banner           Suppress the ASCII banner
+```
+
+## Examples
+
+### From a saved request file
+```bash
+csrf-poc-gen request.txt
+csrf-poc-gen request.txt -o /tmp/my_poc.html
+```
+
+### Pipe directly from `cat`
+```bash
+cat request.txt | csrf-poc-gen -
+```
+
+### Interactive paste mode
+Run the command, paste your request, then press **Enter twice** then **Ctrl-D** (Linux/Mac) or **Ctrl-Z + Enter** (Windows):
+```bash
+csrf-poc-gen -
+```
+```
+[*] Paste your raw HTTP request below.
+    Press Enter twice then Ctrl-D when done.
+
+POST /my-account/change-email HTTP/2
+Host: target.com
+...
+^D
+[+] PoC saved  : csrf_poc.html
+```
+
+### Pipe from clipboard (Linux)
+```bash
+xclip -o | csrf-poc-gen -
+# or with xsel:
+xsel --clipboard | csrf-poc-gen -
+```
+
+### Pipe from clipboard (Mac)
+```bash
+pbpaste | csrf-poc-gen -
+```
+
+### Print to stdout (chain with other tools)
+```bash
+cat request.txt | csrf-poc-gen - --stdout > /var/www/html/poc.html
+```
 
 ## Output format
 
-The generated PoC matches Burp Suite Professional output line-for-line:
+The generated PoC matches Burp Suite Professional output exactly:
 
 ```html
 <html>
@@ -32,71 +114,17 @@ The generated PoC matches Burp Suite Professional output line-for-line:
 </html>
 ```
 
-## Installation
+## Request file format
 
-No installation needed. Just clone and run:
+Standard raw HTTP request as exported by Burp Suite (right-click → **Copy to file** or **Save item**):
 
-```bash
-git clone https://github.com/YOUR_USERNAME/csrf-poc-gen.git
-cd csrf-poc-gen
-```
-
-Requires **Python 3.6+**.
-
-## Usage
-
-1. Copy a raw HTTP request from Burp Suite (right-click → **Copy to file**) and save it as a `.txt` file.
-
-2. Run the tool:
-
-```bash
-python3 csrf_poc_gen.py request.txt
-```
-
-3. Open the generated `csrf_poc.html` in a browser or host it on your server.
-
-### Example — POST request
-
-**`request.txt`**
 ```
 POST /my-account/change-email HTTP/2
-Host: TARGET.web-security-academy.net
+Host: target.web-security-academy.net
 Cookie: session=abc123
 Content-Type: application/x-www-form-urlencoded
 
 email=attacker%40evil.com&csrf=TOKEN123
-```
-
-**Run:**
-```bash
-python3 csrf_poc_gen.py request.txt
-# [+] CSRF PoC generated: csrf_poc.html
-#     Method : POST
-#     Target : https://TARGET.web-security-academy.net/my-account/change-email
-#     Params : ['email', 'csrf']
-```
-
-### Example — GET request
-
-**`request.txt`**
-```
-GET /my-account/change-email?email=attacker%40evil.com&csrf=TOKEN123 HTTP/2
-Host: TARGET.web-security-academy.net
-Cookie: session=abc123
-```
-
-GET params are pulled out of the URL and placed as hidden inputs — same as Burp.
-
-## Request file format
-
-The tool expects a **raw HTTP request** as exported by Burp Suite:
-
-```
-METHOD /path HTTP/version
-Header-Name: value
-...
-[blank line]
-body (for POST)
 ```
 
 ## Legal disclaimer

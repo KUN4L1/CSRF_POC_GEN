@@ -1,109 +1,119 @@
 #!/usr/bin/env python3
 
 """
-CSRF PoC Generator CLI Tool
+CSRF PoC Generator — CLI Tool
 
-Usage:
-    python3 csrf_poc_gen.py request.txt
-
-Description:
-    Generates a CSRF Proof-of-Concept HTML page from a raw HTTP request.
-    Output matches Burp Suite Professional's "Generate CSRF PoC" format.
-    For authorized security testing only.
+Matches Burp Suite Professional's "Generate CSRF PoC" output exactly.
+For authorized security testing only.
 """
 
 import sys
+import os
+import argparse
 import urllib.parse
 
 
-def parse_request(file_path):
-    with open(file_path, 'r') as f:
-        raw = f.read()
+# ──────────────────────────────────────────────
+# Parsing
+# ──────────────────────────────────────────────
 
+def read_raw(source: str) -> str:
+    """
+    Read raw HTTP request from:
+      - a file path
+      - '-'  → stdin (piped or interactive multi-line)
+    """
+    if source == "-":
+        if sys.stdin.isatty():
+            # Interactive: prompt the user, read until blank line + EOF (Ctrl-D)
+            print("[*] Paste your raw HTTP request below.")
+            print("    Press Enter twice then Ctrl-D (Linux/Mac) or Ctrl-Z Enter (Windows) when done.\n")
+        return sys.stdin.read()
+    else:
+        if not os.path.isfile(source):
+            print(f"[!] File not found: {source}")
+            sys.exit(1)
+        with open(source, "r") as f:
+            return f.read()
+
+
+def parse_request(raw: str):
     lines = raw.splitlines()
 
+    # Skip any leading blank lines (common when pasting)
+    while lines and not lines[0].strip():
+        lines.pop(0)
+
+    if not lines:
+        print("[!] Empty request.")
+        sys.exit(1)
+
     # Request line: METHOD /path?query HTTP/version
-    request_line = lines[0]
-    parts = request_line.split()
-    method = parts[0].upper()
-    full_path = parts[1]          # may include query string for GET
-    http_version = parts[2]       # e.g. HTTP/1.1 or HTTP/2
+    parts = lines[0].split()
+    if len(parts) < 3:
+        print(f"[!] Could not parse request line: {lines[0]!r}")
+        sys.exit(1)
+
+    method       = parts[0].upper()
+    full_path    = parts[1]
+    http_version = parts[2]          # HTTP/1.1 or HTTP/2
 
     headers = {}
-    body = ""
+    body    = ""
+    in_body = False
 
-    is_body = False
     for line in lines[1:]:
-        if line.strip() == "":
-            is_body = True
+        if not in_body and line.strip() == "":
+            in_body = True
             continue
-        if not is_body:
+        if in_body:
+            body += line.strip()
+        else:
             if ":" in line:
                 key, value = line.split(":", 1)
                 headers[key.strip().lower()] = value.strip()
-        else:
-            body += line.strip()
 
-    host = headers.get("host", "")
+    host   = headers.get("host", "")
     scheme = "https" if http_version == "HTTP/2" else "http"
 
-    # Split path from query string (relevant for GET requests)
     if "?" in full_path:
         path_only, query_string = full_path.split("?", 1)
     else:
         path_only, query_string = full_path, ""
 
     base_url = f"{scheme}://{host}{path_only}"
-
     return method, base_url, query_string, body
 
 
-def parse_params(data):
-    """Parse URL-encoded param string into an ordered list of (key, value) tuples."""
+# ──────────────────────────────────────────────
+# Encoding & HTML building
+# ──────────────────────────────────────────────
+
+def parse_params(data: str):
     if not data:
         return []
     return urllib.parse.parse_qsl(data, keep_blank_values=True)
 
 
-def html_entity_encode(value):
-    """
-    Encode every non-alphanumeric, non-safe character as a decimal HTML entity.
-    Matches Burp's behaviour: @ -> &#64;  . -> &#46;  / -> &#47; etc.
-    """
-    safe_chars = set(
-        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-        '-_'
+def html_entity_encode(value: str) -> str:
+    safe = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+    return "".join(c if c in safe else f"&#{ord(c)};" for c in value)
+
+
+def build_hidden_inputs(params) -> str:
+    return "".join(
+        f'      <input type="hidden" name="{k}" value="{html_entity_encode(v)}" />\n'
+        for k, v in params
     )
-    result = ""
-    for ch in value:
-        if ch in safe_chars:
-            result += ch
-        else:
-            result += f"&#{ord(ch)};"
-    return result
 
 
-def build_hidden_inputs(params):
-    """Render a list of (key, value) pairs as hidden input tags with entity-encoded values."""
-    inputs = ""
-    for key, value in params:
-        encoded_value = html_entity_encode(value)
-        inputs += f'      <input type="hidden" name="{key}" value="{encoded_value}" />\n'
-    return inputs
+# ──────────────────────────────────────────────
+# PoC generators
+# ──────────────────────────────────────────────
 
-
-def generate_get_poc(base_url, query_string):
-    """
-    GET PoC - mirrors Burp exactly:
-      - Params extracted from query string, rendered as hidden inputs.
-      - Form action is the bare URL with NO query string.
-      - No method attribute on form (defaults to GET).
-      - history.pushState + document.forms[0].submit().
-    """
-    params = parse_params(query_string)
-    inputs = build_hidden_inputs(params)
-
-    html = f"""<html>
+def generate_get_poc(base_url: str, query_string: str) -> str:
+    inputs = build_hidden_inputs(parse_params(query_string))
+    return f"""<html>
   <!-- CSRF PoC - generated by csrf_poc_gen.py -->
   <body>
     <form action="{base_url}">
@@ -116,21 +126,11 @@ def generate_get_poc(base_url, query_string):
   </body>
 </html>
 """
-    return html
 
 
-def generate_post_poc(base_url, body):
-    """
-    POST PoC - mirrors Burp exactly:
-      - Params parsed from request body, rendered as hidden inputs.
-      - HTML entity-encoded values.
-      - history.pushState + document.forms[0].submit().
-      - method="POST" on the form.
-    """
-    params = parse_params(body)
-    inputs = build_hidden_inputs(params)
-
-    html = f"""<html>
+def generate_post_poc(base_url: str, body: str) -> str:
+    inputs = build_hidden_inputs(parse_params(body))
+    return f"""<html>
   <!-- CSRF PoC - generated by csrf_poc_gen.py -->
   <body>
     <form action="{base_url}" method="POST">
@@ -143,38 +143,106 @@ def generate_post_poc(base_url, body):
   </body>
 </html>
 """
-    return html
+
+
+# ──────────────────────────────────────────────
+# CLI
+# ──────────────────────────────────────────────
+
+BANNER = r"""
+  ___ ___ ___  _____   ___  ___ ___    __ _ ___ _ __
+ / __/ __| _ \| __| \ / / \/ __|  _|  / _` / -_) '  \
+| (__\__ |   /| _|  V /| >  < (_ | _|| (_| \__/ |_|_|
+ \___|___|_|_\|_|   \_//_/_/\_\___|___|\__, |\___|_|_|
+                                       |___/
+ Burp-compatible CSRF PoC Generator
+"""
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="csrf-poc-gen",
+        description="Generate a CSRF PoC HTML file from a raw HTTP request.\n"
+                    "Matches Burp Suite Professional output exactly.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+examples:
+  # From a saved request file
+  csrf-poc-gen request.txt
+
+  # Pipe directly from a file
+  cat request.txt | csrf-poc-gen -
+
+  # Interactive paste mode (run, paste, Ctrl-D)
+  csrf-poc-gen -
+
+  # Custom output filename
+  csrf-poc-gen request.txt -o /tmp/my_poc.html
+
+  # Print PoC to stdout instead of saving
+  csrf-poc-gen request.txt --stdout
+
+  # Pipe Burp's clipboard output straight through
+  xclip -o | csrf-poc-gen -
+        """
+    )
+    parser.add_argument(
+        "input",
+        metavar="REQUEST",
+        help="Path to a raw HTTP request file, or '-' to read from stdin (paste/pipe)"
+    )
+    parser.add_argument(
+        "-o", "--output",
+        metavar="FILE",
+        default="csrf_poc.html",
+        help="Output file path (default: csrf_poc.html)"
+    )
+    parser.add_argument(
+        "--stdout",
+        action="store_true",
+        help="Print the generated PoC to stdout instead of writing a file"
+    )
+    parser.add_argument(
+        "--no-banner",
+        action="store_true",
+        help="Suppress the ASCII banner"
+    )
+    return parser
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python3 csrf_poc_gen.py <request_file>")
-        sys.exit(1)
+    parser = build_parser()
+    args   = parser.parse_args()
 
-    file_path = sys.argv[1]
+    if not args.no_banner and not args.stdout:
+        print(BANNER)
 
     try:
-        method, base_url, query_string, body = parse_request(file_path)
+        raw = read_raw(args.input)
+        method, base_url, query_string, body = parse_request(raw)
 
         if method == "GET":
-            html = generate_get_poc(base_url, query_string)
+            html       = generate_get_poc(base_url, query_string)
             param_keys = [k for k, _ in parse_params(query_string)]
         elif method == "POST":
-            html = generate_post_poc(base_url, body)
+            html       = generate_post_poc(base_url, body)
             param_keys = [k for k, _ in parse_params(body)]
         else:
-            print(f"[!] Unsupported method: {method}")
+            print(f"[!] Unsupported HTTP method: {method}")
             sys.exit(1)
 
-        output_file = "csrf_poc.html"
-        with open(output_file, "w") as f:
-            f.write(html)
+        if args.stdout:
+            print(html)
+        else:
+            with open(args.output, "w") as f:
+                f.write(html)
+            print(f"[+] PoC saved  : {args.output}")
+            print(f"    Method     : {method}")
+            print(f"    Target     : {base_url}")
+            print(f"    Parameters : {param_keys}")
 
-        print(f"[+] CSRF PoC generated: {output_file}")
-        print(f"    Method : {method}")
-        print(f"    Target : {base_url}")
-        print(f"    Params : {param_keys}")
-
+    except KeyboardInterrupt:
+        print("\n[!] Aborted.")
+        sys.exit(1)
     except Exception as e:
         print(f"[!] Error: {e}")
         sys.exit(1)
