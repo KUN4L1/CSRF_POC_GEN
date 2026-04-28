@@ -114,6 +114,11 @@ For **authorized security testing only** — penetration tests, CTFs, and bug bo
 where you have explicit permission to test the target.
 Unauthorized use is illegal.
 
+## 👨‍💻 Contributors
+
+- Rohit Gupta
+- rohit-2003-bot
+
 ## License
 
 MIT
