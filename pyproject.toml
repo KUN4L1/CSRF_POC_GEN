@@ -6,7 +6,18 @@ build-backend = "setuptools.build_meta"
 name = "csrf-poc-gen"
 version = "1.0.0"
 description = "Burp-compatible CSRF PoC generator from raw HTTP requests"
+readme = "README.md"
 requires-python = ">=3.6"
+keywords = ["csrf", "security", "penetration-testing", "burpsuite"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+]
 
 [project.scripts]
 csrf-poc-gen = "csrf_poc_gen:main"
+
+[tool.setuptools]
+py-modules = ["csrf_poc_gen"]

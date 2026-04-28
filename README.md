@@ -1,101 +1,78 @@
 # csrf-poc-gen
 
-A CLI tool that generates CSRF Proof-of-Concept HTML pages from raw HTTP requests, matching the exact output of Burp Suite Professional's **"Generate CSRF PoC"** engagement tool.
+A CLI tool that generates CSRF Proof-of-Concept HTML pages from raw HTTP requests.
+Matches **Burp Suite Professional's "Generate CSRF PoC"** output exactly.
 
-## Features
+---
 
-- Supports both `GET` and `POST` requests
-- **Three input modes** — file, pipe, or interactive paste
-- Automatically detects `HTTP/2` → `https://` scheme
-- HTML decimal entity-encodes all values (`@` → `&#64;`, `.` → `&#46;`) exactly like Burp
-- Adds `history.pushState` to strip the `Referer` header on submit
-- Custom output path with `-o` flag
-- `--stdout` mode to pipe output to other tools
-- Zero dependencies — pure Python 3 standard library
+## Install
 
-## Installation
+### From PyPI (recommended)
+```bash
+pip install csrf-poc-gen
+```
 
-### Option A — Run directly (no install)
+### From source
 ```bash
 git clone https://github.com/YOUR_USERNAME/csrf-poc-gen.git
 cd csrf-poc-gen
-python3 csrf_poc_gen.py request.txt
+pip install .
 ```
 
-### Option B — Install as a system command (`csrf-poc-gen`)
-```bash
-git clone https://github.com/YOUR_USERNAME/csrf-poc-gen.git
-cd csrf-poc-gen
-pip install . --break-system-packages
-```
+After either install, the `csrf-poc-gen` command is available **globally** from any directory.
 
-After install, the `csrf-poc-gen` command is available globally from anywhere in your terminal.
+---
 
 ## Usage
 
 ```
-usage: csrf-poc-gen [-h] [-o FILE] [--stdout] [--no-banner] REQUEST
-
-positional arguments:
-  REQUEST               Path to a raw HTTP request file, or '-' to read from stdin
-
-options:
-  -h, --help            show this help message and exit
-  -o FILE, --output FILE
-                        Output file path (default: csrf_poc.html)
-  --stdout              Print PoC to stdout instead of saving to a file
-  --no-banner           Suppress the ASCII banner
+csrf-poc-gen [REQUEST] [-o FILE] [--stdout] [--no-banner] [-help]
 ```
+
+| Argument | Description |
+|---|---|
+| `REQUEST` | Path to a raw HTTP request file, or `-` to read from stdin |
+| `-o FILE` | Output file path (default: `csrf_poc.html`) |
+| `--stdout` | Print PoC HTML to stdout instead of saving |
+| `--no-banner` | Suppress the ASCII banner |
+| `-help` | Show help and exit |
+
+---
 
 ## Examples
 
-### From a saved request file
+**File input:**
 ```bash
 csrf-poc-gen request.txt
-csrf-poc-gen request.txt -o /tmp/my_poc.html
+csrf-poc-gen request.txt -o /tmp/poc.html
 ```
 
-### Pipe directly from `cat`
+**Stdin / pipe — no file needed:**
 ```bash
-cat request.txt | csrf-poc-gen -
-```
-
-### Interactive paste mode
-Run the command, paste your request, then press **Enter twice** then **Ctrl-D** (Linux/Mac) or **Ctrl-Z + Enter** (Windows):
-```bash
+# Interactive paste (run, paste request, press Ctrl-D)
 csrf-poc-gen -
-```
-```
-[*] Paste your raw HTTP request below.
-    Press Enter twice then Ctrl-D when done.
 
-POST /my-account/change-email HTTP/2
-Host: target.com
-...
-^D
-[+] PoC saved  : csrf_poc.html
-```
+# Pipe from a file
+cat request.txt | csrf-poc-gen -
 
-### Pipe from clipboard (Linux)
-```bash
-xclip -o | csrf-poc-gen -
-# or with xsel:
-xsel --clipboard | csrf-poc-gen -
-```
-
-### Pipe from clipboard (Mac)
-```bash
+# Pipe from clipboard on Mac
 pbpaste | csrf-poc-gen -
+
+# Pipe from clipboard on Linux
+xclip -o | csrf-poc-gen -
 ```
 
-### Print to stdout (chain with other tools)
+**Print to stdout:**
 ```bash
+cat request.txt | csrf-poc-gen - --stdout
 cat request.txt | csrf-poc-gen - --stdout > /var/www/html/poc.html
 ```
 
+---
+
 ## Output format
 
-The generated PoC matches Burp Suite Professional output exactly:
+Matches Burp Suite Professional output exactly:
 
 ```html
 <html>
@@ -114,9 +91,11 @@ The generated PoC matches Burp Suite Professional output exactly:
 </html>
 ```
 
+---
+
 ## Request file format
 
-Standard raw HTTP request as exported by Burp Suite (right-click → **Copy to file** or **Save item**):
+Standard raw HTTP request as saved from Burp Suite (right-click → **Save item** or **Copy to file**):
 
 ```
 POST /my-account/change-email HTTP/2
@@ -127,9 +106,13 @@ Content-Type: application/x-www-form-urlencoded
 email=attacker%40evil.com&csrf=TOKEN123
 ```
 
+---
+
 ## Legal disclaimer
 
-This tool is intended for **authorized security testing only** — penetration tests, CTFs, and bug bounty programs where you have explicit permission to test the target. Unauthorized use against systems you do not own or have permission to test is illegal.
+For **authorized security testing only** — penetration tests, CTFs, and bug bounty programs
+where you have explicit permission to test the target.
+Unauthorized use is illegal.
 
 ## License
 
